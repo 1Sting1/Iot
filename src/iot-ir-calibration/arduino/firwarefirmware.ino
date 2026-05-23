@@ -6,7 +6,7 @@ const int LED_PIN = 13;
 bool isCalibrating = false;
 int calibMin = 0;
 int calibMax = 0;
-bool visited[200];
+bool visited[201];
 
 float getUltrasonicDistance() {
   digitalWrite(TRIG_PIN, LOW);
@@ -14,7 +14,6 @@ float getUltrasonicDistance() {
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
   if (duration == 0) return -1;
   return duration * 0.0343 / 2.0;
@@ -22,6 +21,8 @@ float getUltrasonicDistance() {
 
 bool checkDataSufficiency() {
   int totalBins = calibMax - calibMin + 1;
+  if (totalBins <= 0) return false;
+
   int filledCount = 0;
   int currentGap = 0;
   int maxGap = 0;
@@ -29,32 +30,16 @@ bool checkDataSufficiency() {
   for (int i = calibMin; i <= calibMax; i++) {
     if (visited[i]) {
       filledCount++;
-      if (currentGap > maxGap) {
-        maxGap = currentGap;
-      }
+      if (currentGap > maxGap) maxGap = currentGap;
       currentGap = 0;
     } else {
       currentGap++;
     }
   }
-  if (currentGap > maxGap) {
-    maxGap = currentGap;
-  }
+  if (currentGap > maxGap) maxGap = currentGap;
 
   float coverage = (float)filledCount / totalBins;
-
   return (coverage >= 0.90) && (maxGap <= 2);
-}
-
-float getDistanceIR(int analogVal, float* coeffs, int degree) {
-  float distance = 0.0;
-  float currentPower = 1.0;
-
-  for (int i = degree; i >= 0; i--) {
-    distance += coeffs[i] * currentPower;
-    currentPower *= analogVal;
-  }
-  return distance;
 }
 
 void setup() {
@@ -72,7 +57,6 @@ void loop() {
     if (cmd.startsWith("CAL")) {
       int firstSpace = cmd.indexOf(' ');
       int secondSpace = cmd.indexOf(' ', firstSpace + 1);
-
       if (firstSpace > 0 && secondSpace > 0) {
         calibMin = cmd.substring(firstSpace + 1, secondSpace).toInt();
         calibMax = cmd.substring(secondSpace + 1).toInt();
@@ -91,8 +75,7 @@ void loop() {
 
     if (usDist >= calibMin && usDist <= calibMax) {
       int distInt = (int)round(usDist);
-
-      if (!visited[distInt]) {
+      if (distInt >= 0 && distInt < 201) {
         visited[distInt] = true;
       }
 
@@ -103,17 +86,17 @@ void loop() {
 
       if (checkDataSufficiency()) {
         isCalibrating = false;
+        Serial.flush();
+        delay(100);
         Serial.println("DONE");
 
-        for (int i = 0; i < 5; i++) {
-          digitalWrite(LED_PIN, HIGH);
-          delay(200);
-          digitalWrite(LED_PIN, LOW);
-          delay(200);
+        for (int i = 0; i < 10; i++) {
+          digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+          delay(100);
         }
         digitalWrite(LED_PIN, HIGH);
       }
     }
-    delay(50);
+    delay(60);
   }
 }
